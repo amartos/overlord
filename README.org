@@ -2,3 +2,47 @@
 #+author: Alexandre Martos
 
 * Overlord
+
+This simple script, used as a git hook, executes all scripts in the
+corresponding =hook-name.d= directory.
+
+* Install
+
+Drop this script into your hooks directory. Another option is to clone this
+directory, and point your =core.hooksPath= config variable to it.
+
+Example (replace the directories paths with your own):
+
+#+begin_example bash
+export HOOKS_ROOT=path/to/your/hooks/root/dir
+cd "$HOOKS_ROOT"
+# either direct download
+#mkdir -p overlord && wget https://raw.githubusercontent.com/amartos/overlord/master/overlord -O overlord/overlord
+# or clone the repo
+git clone https://github.com/amartos/overlord
+cd path/to/your/git/repo
+git config core.hooksPath "$HOOKS_ROOT"/overlord
+#+end_example
+
+Then, symlink the =overlord= script as a git hook, and create the corresponding
+=hook-name.d= directory alongside the =overlord= script.
+
+#+begin_example bash
+cd path/to/your/hooks/root/dir/overlord
+export HOOK=hook-name
+ln -s overlord "$HOOK" && mkdir "$HOOK".d
+#+end_example
+
+The script is able do this by itself, for multiple hooks at once.
+Just call it directly, passing the names of all the hooks to init.
+
+#+begin_example bash
+cd path/to/your/hooks/root/dir/overlord
+./overlord first-hook-name second-hook-name # ...
+#+end_example
+
+* Usage
+
+Now, any script within the =hook-name.d= directories will be executed when the
+corresponding hook is triggered. Moreover, you can execute the =hook-name= script
+yourself to trigger all of them manually.

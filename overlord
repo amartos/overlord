@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+
+if [[ "$(basename $0)" == "overlord" ]]
+then
+    if [ -z "$1" ]
+    then
+        >&2 echo "HOOK-NAME is missing
+usage: $0 HOOK-NAME [HOOK-NAME]..."
+        exit 1
+    fi
+
+    HOOKDIR="$(dirname $0)"
+    for h in $@
+    do
+        HOOK="$HOOKDIR/$h"
+        ln -s "$0" "$HOOK"
+        mkdir -p "$HOOK".d
+    done
+else
+    HOOKS="$0".d
+    mkdir -p "$HOOKS"
+    [ -z "$(ls $HOOKS)" ] && exit 0
+
+    STDIN="$(cat)"
+    for h in $HOOKS/*
+    do
+        if [ -x "$h" ]
+        then
+            echo "$STDIN" | $h || exit $?
+        fi
+    done
+fi
