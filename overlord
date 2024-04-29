@@ -28,6 +28,6 @@ for h in $HOOKS/*
 do
     if [ -x "$h" ]
     then
-        echo "$STDIN" | $h || exit $?
+        echo "$STDIN" | $h $@ || exit $?
     fi
 done
