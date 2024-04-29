@@ -16,17 +16,18 @@ usage: $0 HOOK-NAME [HOOK-NAME]..."
         ln -s "$0" "$HOOK"
         mkdir -p "$HOOK".d
     done
-else
-    HOOKS="$0".d
-    mkdir -p "$HOOKS"
-    [ -z "$(ls $HOOKS)" ] && exit 0
-
-    STDIN="$(cat)"
-    for h in $HOOKS/*
-    do
-        if [ -x "$h" ]
-        then
-            echo "$STDIN" | $h || exit $?
-        fi
-    done
+    exit 0
 fi
+
+HOOKS="$0".d
+mkdir -p "$HOOKS"
+[ -z "$(ls $HOOKS)" ] && exit 0
+
+STDIN="$(cat)"
+for h in $HOOKS/*
+do
+    if [ -x "$h" ]
+    then
+        echo "$STDIN" | $h || exit $?
+    fi
+done
