@@ -278,6 +278,9 @@ mkdir -p "$HOOKS"
 # No hook-name.d script to execute
 [ -z "$(ls $HOOKS)" ] && exit 0
 
+STDIN=""
+read -t 0 && STDIN="$(cat)"
+
 # Daemonize the hook (if not already)
 if grep -qF "$HOOK" <<<"${BG_HOOKS[@]}"
 then
@@ -289,7 +292,7 @@ then
     if [ ! -f "$LOCKFILE" ]
     then
         touch "$LOCKFILE"
-        ($0 $@ <<<"$(cat)" 1>>"$LOGFILE" 2>&1 &)&
+        ($0 $@ <<<"$STDIN" 1>>"$LOGFILE" 2>&1 &)&
         exit 0
     else
         trap "rm $LOCKFILE" EXIT
@@ -297,7 +300,6 @@ then
 fi
 
 # hook-name.d scripts execution
-STDIN="$(cat)"
 for h in $HOOKS/*
 do
     # ignore non-executable scripts
