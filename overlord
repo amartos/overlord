@@ -7,6 +7,9 @@
 
 DEFAULT_LOGS=/var/log/git
 OVERLORD_LOGS="${OVERLORD_LOGS:-$DEFAULT_LOGS}"
+
+# Hooks that do not change the action outcome AND for which status
+# code is generally not important
 BG_HOOKS=(
     "post-applypatch"
     "post-commit"
@@ -14,6 +17,40 @@ BG_HOOKS=(
     "post-receive"
     "post-update"
     "p4-post-changelist"
+)
+
+# All git hooks
+# version: git v2.44.0
+# see: https://git-scm.com/docs/githooks
+GIT_HOOKS=(
+    "applypatch-msg"
+    "pre-applypatch"
+    ${BG_HOOKS[0]} # post-apply-patch
+    "pre-commit"
+    "pre-merge-commit"
+    "prepare-commit-msg"
+    "commit-msg"
+    ${BG_HOOKS[1]} # post-commit
+    "pre-rebase"
+    "post-checkout"
+    ${BG_HOOKS[2]} # post-merge
+    "pre-push"
+    "pre-receive"
+    "update"
+    "proc-receive"
+    ${BG_HOOKS[3]} # post-receive
+    ${BG_HOOKS[4]} # post-update
+    "reference-transaction"
+    "push-to-checkout"
+    "pre-auto-gc"
+    "post-rewrite"
+    "sendemail-validate"
+    "fsmonitor-watchman"
+    "p4-changelist"
+    "p4-prepare-changelist"
+    ${BG_HOOKS[4]} # p4-post-changelist
+    "p4-pre-submit"
+    "post-index-change"
 )
 
 USAGE="usage: $(basename $0) [-h] [-v] [-w] HOOK-NAME [HOOK-NAME...]"
@@ -70,12 +107,9 @@ Used directly and given one (or more) hook names, the overlord script
 will initialize the current directory for the given hooks execution
 through itself.
 
-If used through a symlink, it will execute any script found in the
-subdirectory "./symlink-name.d", passing any argument and STDIN input
-to each of them. Thus, if the symlink is both located in the git hooks
-directory and is named as a git hook, the overlord script will
-delegate the hook execution to each script located in the
-"./hook-name.d" subdirectory.
+If named as a git hook (for eg. via symlink or hardlink), it will
+execute any script found in the subdirectory "./hook-name.d", passing
+any argument and STDIN input to each of them.
 
 Example of the git hooks directory structure:
 
@@ -96,9 +130,6 @@ OVERLORD_LOGS/hook-name.log.
 
 [NOTES]
 
-Hardlinks execution will act as if the main overlord script was
-called. Only symlinks are able to act as git hooks.
-
 When executed as a git hook, STDIN and arguments are transparently
 passed to each hook-name.d script. No analysis nor modifications are
 done.
@@ -107,6 +138,9 @@ Any non-executable or ".hidden" hook-name.d script is ignored.
 
 An empty hook-name.d directory will not fail the hook, which will
 simply exit with a 0 status code.
+
+The full list of supported git hooks:
+$(echo ${GIT_HOOKS[@]} | fold -s)
 
 The full list of daemonized git hooks:
 $(echo ${BG_HOOKS[@]} | fold -s)
@@ -196,11 +230,18 @@ EOF
     license
 }
 
+# @brief check if the given string is a git hook name
+# @param $1 the string to check
+# @exit 1 if the string is not a git hook name
+check_hook() {
+    grep -qwF "$1" <<<"${GIT_HOOKS[@]}"
+}
+
 ################################################################################
 # Main overlord execution
 ################################################################################
 
-if [[ "$(basename $0)" == "overlord" ]]
+if ! check_hook $(basename $0)
 then
     while getopts "hvw" arg
     do
@@ -228,6 +269,9 @@ fi
 # Hooks execution
 ################################################################################
 
+HOOK="$(basename $0)"
+check_hook "$HOOK"
+
 HOOKS="$0".d
 mkdir -p "$HOOKS"
 
@@ -235,7 +279,6 @@ mkdir -p "$HOOKS"
 [ -z "$(ls $HOOKS)" ] && exit 0
 
 # Daemonize the hook (if not already)
-HOOK="$(basename $0)"
 if grep -qF "$HOOK" <<<"${BG_HOOKS[@]}"
 then
     mkdir -p "$OVERLORD_LOGS"
