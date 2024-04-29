@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+OVERLORD_LOGS="${OVERLORD_LOGS:-/var/log/git}"
+
 if [[ "$(basename $0)" == "overlord" ]]
 then
     if [ -z "$1" ]
@@ -22,6 +24,33 @@ fi
 HOOKS="$0".d
 mkdir -p "$HOOKS"
 [ -z "$(ls $HOOKS)" ] && exit 0
+
+HOOK="$(basename $0)"
+BG_HOOKS=(
+    "post-applypatch"
+    "post-commit"
+    "post-merge"
+    "post-receive"
+    "post-update"
+    "p4-post-changelist"
+)
+
+if grep -qF "$HOOK" <<<"${BG_HOOKS[@]}"
+then
+    mkdir -p "$OVERLORD_LOGS"
+    chmod 750 "$OVERLORD_LOGS"
+    LOGFILE="$OVERLORD_LOGS/$HOOK.log"
+    LOCKFILE="/tmp/$(tr '/' '_' <<<$0).lock"
+
+    if [ ! -f "$LOCKFILE" ]
+    then
+        touch "$LOCKFILE"
+        ($0 $@ <<<"$(cat)" 1>>"$LOGFILE" 2>&1 &)&
+        exit 0
+    else
+        trap "rm $LOCKFILE" EXIT
+    fi
+fi
 
 STDIN="$(cat)"
 for h in $HOOKS/*
