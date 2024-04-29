@@ -1,15 +1,218 @@
 #!/usr/bin/env bash
 
-OVERLORD_LOGS="${OVERLORD_LOGS:-/var/log/git}"
+# @file      overlord
+# @brief     A simple git hooks launcher
+# @copyright 2024 Alexandre Martos <contact@amartos.fr>
+# @license   GPLv3
+
+DEFAULT_LOGS=/var/log/git
+OVERLORD_LOGS="${OVERLORD_LOGS:-$DEFAULT_LOGS}"
+BG_HOOKS=(
+    "post-applypatch"
+    "post-commit"
+    "post-merge"
+    "post-receive"
+    "post-update"
+    "p4-post-changelist"
+)
+
+USAGE="usage: $(basename $0) [-h] [-v] [-w] HOOK-NAME [HOOK-NAME...]"
+VERSION="overlord v1.0.0"
+LICENSE=$(cat <<EOF
+$VERSION Copyright (C) 2024 Alexandre Martos <contact@amartos.fr>
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+EOF
+)
+
+# @brief print the usage line on stderr and exit
+# @param $@ (optional) a message to print first on stderr
+# @exit 1
+usage() {
+    [ ${#@} -ne 0 ] && >&2 echo -e "$@\n"
+    >&2 echo "$USAGE" && exit 1
+}
+
+# @brief print the version number on stdout and exit
+# @exit 0
+version() {
+    echo "$VERSION" && exit 0
+}
+
+# @brief print the short license text on stdout and exit
+# @exit 0
+license() {
+    echo "$LICENSE" && exit 0
+}
+
+# @brief print the help manual on stdout and exit
+# @exit 0
+phelp() {
+    cat <<EOF
+$USAGE
+
+This script is designed to be used as a git hooks execution platform.
+
+[DESCRIPTION]
+
+Used directly and given one (or more) hook names, the overlord script
+will initialize the current directory for the given hooks execution
+through itself.
+
+If used through a symlink, it will execute any script found in the
+subdirectory "./symlink-name.d", passing any argument and STDIN input
+to each of them. Thus, if the symlink is both located in the git hooks
+directory and is named as a git hook, the overlord script will
+delegate the hook execution to each script located in the
+"./hook-name.d" subdirectory.
+
+Example of the git hooks directory structure:
+
+git-hooks-directory/
+|_ overlord
+|_ hook-name -> ./overlord
+|_ hook-name.d/
+   |_ my-script
+   |_ my-other-script
+   |_ my-other-other-script
+   |_ ...
+
+Git hooks not affecting the outcome of the action (including with via
+their exit code status) are daemonized when using the overlord script,
+allowing for non-blocking hook-name.d scripts executions in those
+cases. The daemonized scripts stdout and stderr outputs are logged at
+OVERLORD_LOGS/hook-name.log.
+
+[NOTES]
+
+Hardlinks execution will act as if the main overlord script was
+called. Only symlinks are able to act as git hooks.
+
+When executed as a git hook, STDIN and arguments are transparently
+passed to each hook-name.d script. No analysis nor modifications are
+done.
+
+Any non-executable or ".hidden" hook-name.d script is ignored.
+
+An empty hook-name.d directory will not fail the hook, which will
+simply exit with a 0 status code.
+
+The full list of daemonized git hooks:
+$(echo ${BG_HOOKS[@]} | fold -s)
+
+[SCRIPTS EXECUTION ORDER]
+
+The hook-name.d scripts are executed in name order. Should any of
+those scripts be executed before any other, you thus have to adapt
+their names.
+
+A simple way to order them is to prefix any hook-name.d script with a
+number, for example:
+
+git-hooks-directory/
+|_ overlord
+|_ hook-name -> ./overlord
+|_ hook-name.d/
+   |_ 00-my-first-script
+   |_ 01-my-second-script
+   |_ 02-my-third-script
+   |_ ...
+
+Communication between the hook-name.d scripts is not handled by the
+overlord script.
+
+[EXIT STATUS]
+
+For daemonized git hooks, the main overlord script exits with a 0
+status code, regardless of any hook-name.d script exit status
+code. However, the background execution will prematurely stop at the
+first hook-name.d script exiting with a non-zero status code,
+preventing further execution.
+
+For foreground git hooks scripts execution, if any hook-name.d script
+exits with a non-zero status code, the main overlord script will
+immediately exit with the same status code, preventing further
+execution.
+
+[STDIN]
+
+When used as a git hook, STDIN input is transparently passed to each
+hook-name.d script. See the git hooks documentation for further
+information.
+
+When the overlord script is used directly, STDIN is ignored.
+
+[ARGUMENTS]
+
+If executed as a git hook, the arguments are those of the
+corresponding hook, and are transparently passed to each hook-name.d
+script. See the git hooks documentation for further information.
+
+When used directly, the arguments expected by the overlord script are:
+
+HOOK-NAME       the name of the git hook to initialize alongside the
+                overlord script; you can pass multiple names at once
+
+[OPTIONS]
+
+If executed as a git hook, the options are those of the corresponding
+hook, and are transparently passed to each hook-name.d script. See the
+git hooks documentation for further information.
+
+When used directly, the overlord script options are:
+
+-h              print this help and exit
+-v              print the version number and exit
+-w              print the short license text and exit
+
+[ENVIRONMENT]
+
+OVERLORD_LOGS   the daemonized hooks logs root directory;
+                defaults to $DEFAULT_LOGS
+
+[BUGS]
+
+In case of issues please contact the maintainer at:
+https://github.com/amartos/overlord/issues
+
+[FURTHER READING]
+
+Git hooks documentation: https://git-scm.com/docs/githooks
+
+[COPYRIGHT]
+
+EOF
+    license
+}
+
+################################################################################
+# Main overlord execution
+################################################################################
 
 if [[ "$(basename $0)" == "overlord" ]]
 then
-    if [ -z "$1" ]
-    then
-        >&2 echo "HOOK-NAME is missing
-usage: $0 HOOK-NAME [HOOK-NAME]..."
-        exit 1
-    fi
+    while getopts "hvw" arg
+    do
+        case "$arg" in
+            h) phelp ;;
+            v) version ;;
+            w) license ;;
+            *) usage ;;
+        esac
+    done
+
+    [ ${#@} -eq 0 ] && usage "At least one hook name is mandatory"
 
     HOOKDIR="$(dirname $0)"
     for h in $@
@@ -21,20 +224,18 @@ usage: $0 HOOK-NAME [HOOK-NAME]..."
     exit 0
 fi
 
+################################################################################
+# Hooks execution
+################################################################################
+
 HOOKS="$0".d
 mkdir -p "$HOOKS"
+
+# No hook-name.d script to execute
 [ -z "$(ls $HOOKS)" ] && exit 0
 
+# Daemonize the hook (if not already)
 HOOK="$(basename $0)"
-BG_HOOKS=(
-    "post-applypatch"
-    "post-commit"
-    "post-merge"
-    "post-receive"
-    "post-update"
-    "p4-post-changelist"
-)
-
 if grep -qF "$HOOK" <<<"${BG_HOOKS[@]}"
 then
     mkdir -p "$OVERLORD_LOGS"
@@ -52,9 +253,11 @@ then
     fi
 fi
 
+# hook-name.d scripts execution
 STDIN="$(cat)"
 for h in $HOOKS/*
 do
+    # ignore non-executable scripts
     if [ -x "$h" ]
     then
         echo "$STDIN" | $h $@ || exit $?
