@@ -6,6 +6,10 @@
 This simple script, used as a git hook, executes all scripts in the
 corresponding =hook-name.d= directory.
 
+It is also capable of daemonizing itself for a limited set of git
+hooks where the scripts execution will not affect the outcome of the
+action.
+
 * Install
 
 Drop this script into your hooks directory. Another option is to clone this
@@ -43,6 +47,26 @@ cd path/to/your/hooks/root/dir/overlord
 
 * Usage
 
+To print the manual:
+
+#+begin_example bash
+./overlord -h
+#+end_example
+
 Now, any script within the =hook-name.d= directories will be executed when the
-corresponding hook is triggered. Moreover, you can execute the =hook-name= script
-yourself to trigger all of them manually.
+corresponding hook is triggered, transparently receiving both the
+input and arguments of the hook.
+
+Moreover, you can execute the =hook-name= script yourself to trigger all
+of them manually.
+
+* Daemonized hooks
+
+For hooks that do not affect the outcome of the action (even through
+their exit status), the =overlord= script will execute all the
+=hook-name.d= scripts asynchronously, making those hooks
+non-blocking. However, the background execution will stop immediately
+if the current =hook-name.d= script exits with a non-zero status code.
+
+The list of daemonized hooks can be found in the =NOTES= section of the
+script manual =./overlord -h=.
